@@ -117,11 +117,11 @@ QByteArray MainWindow::HexStringToByteArray(QString HexString)
 
 void MainWindow::ReadData()
 {
-    //static QString oldString;
+    static QString oldString;
     QByteArray buffer = tcpClient->readAll();
 
 
-    //QString strRecv = QString(buffer);
+    QString strRecv = QString(buffer);
 
 
     if(!buffer.isEmpty())
@@ -139,7 +139,7 @@ void MainWindow::ReadData()
             ui->EditRecv->insertPlainText(tstr);
         }
         else
-            ui->EditRecv->insertPlainText(QString(buffer));
+            ui->EditRecv->insertPlainText(QString(buffer) + "\n");
     }
 }
 
