@@ -115,14 +115,159 @@ QByteArray MainWindow::HexStringToByteArray(QString HexString)
     return ret;
 }
 
+void MainWindow::FrameProc(QString &str)
+{
+    //数据帧：T:27.9, A:  -406     64  16252,G:     1      0     -2, F: -0.0   0.2   0.7, W:0
+    //处理参数帧：P1:30, P2:7, P3:30, P4:100
+    if(str[0] == 'T' && str.length() >= 60)
+    {
+        float temp,fax,fay,faz;
+        int ax,ay,az,gx,gy,gz,w;
+
+        QStringList list = str.split(QRegExp("[:, ]"),QString::SkipEmptyParts);  //以:, 三个符号（正则表达式）作为分割数据帧的依据，并跳过空白部分
+        for(int i = 0;i < list.size();++i)
+        {
+            if(list[i] == "T")       //检测到T，则T的下一位就是温度
+            {
+                temp = list[i + 1].toFloat();
+                ++i;
+            }
+            else if(list[i] == "A")
+            {
+                ax = list[i + 1].toInt();
+                ay = list[i + 2].toInt();
+                az = list[i + 3].toInt();
+                i += 3;
+            }
+            else if(list[i] == "G")
+            {
+                gx = list[i + 1].toInt();
+                gy = list[i + 2].toInt();
+                gz = list[i + 3].toInt();
+                i += 3;
+            }
+            else if(list[i] == "F")
+            {
+                fax = list[i + 1].toFloat();
+                fay = list[i + 2].toFloat();
+                faz = list[i + 3].toFloat();
+                i += 3;
+            }
+            else if(list[i] == "W")
+            {
+                w = list[i + 1].toInt();
+                ++i;
+            }
+        }
+
+        ui->edit_temp->setText(QString::number(temp) + "℃");   //在UI界面中显示温度
+        ui->edit_ax->setText(QString::number(ax));
+        ui->edit_ay->setText(QString::number(ay));
+        ui->edit_az->setText(QString::number(az));
+        ui->edit_gx->setText(QString::number(gx));
+        ui->edit_gy->setText(QString::number(gy));
+        ui->edit_gz->setText(QString::number(gz));
+        ui->edit_pitch->setText(QString::number(fax) + "°");
+        ui->edit_roll->setText(QString::number(fay) + "°");
+        ui->edit_yaw->setText(QString::number(faz) + "°");
+
+        switch(w)
+        {
+        case 1:
+            ui->edit_warn->setText("温度报警");
+            break;
+        case 2:
+            ui->edit_warn->setText("震动报警");
+            break;
+        case 3:
+            ui->edit_warn->setText("温度、震动报警");
+            break;
+        default:
+            ui->edit_warn->setText("无");
+            break;
+        }
+
+    }
+    else if(str.startsWith("P1:") && str.length() >= 20)      //读取参数帧
+    {
+        int pos = str.indexOf("P1:");
+        QString tst;
+        int end;
+        if(pos >= 0)
+        {
+            tst = str.mid(pos + 3);
+            end = tst.indexOf(",");
+            if(end > 0)
+            {
+                int templmt = tst.left(end).toInt();
+                ui->spin_templmt->setValue(templmt);
+            }
+        }
+        pos = str.indexOf("P2:");
+        if(pos >= 0)
+        {
+            tst = str.mid(pos + 3);
+            end = tst.indexOf(",");
+            if(end > 0)
+            {
+                int mpustep = tst.left(end).toInt();
+                ui->cmb_mpustep->setCurrentIndex(mpustep);
+            }
+        }
+        pos = str.indexOf("P3:");
+        if(pos >= 0)
+        {
+            tst = str.mid(pos + 3);
+            end = tst.indexOf(",");
+            if(end > 0)
+            {
+                int warntime = tst.left(end).toInt();
+                ui->spin_warntime->setValue(warntime);
+            }
+        }
+        pos = str.indexOf("P4:");
+        if(pos >= 0)
+        {
+            tst = str.mid(pos + 3);
+            int upstep = tst.toInt();
+            ui->spin_upstep->setValue(upstep / 1000.0);
+        }
+    }
+}
+
 void MainWindow::ReadData()
 {
     static QString oldString;
     QByteArray buffer = tcpClient->readAll();
 
-
+    ////////////////////////////////
+    /// 接收数据处理
+    ///
     QString strRecv = QString(buffer);
+    int pos = strRecv.indexOf("\n");
+    if(pos >= 0)
+    {
 
+        oldString += strRecv.left(pos + 1);    //完整帧数据处理
+        FrameProc(oldString);                  //在页面各个文本框中显示接收的数据
+
+        strRecv = strRecv.right(strRecv.length() - pos - 1);   //存储剩余数据
+        while(true)
+        {
+            pos = strRecv.indexOf("\n");
+            if(pos < 0)        //已经处理完毕
+            {
+                oldString = strRecv;
+                break;         //如果处理完就跳出循环，下面的语句只有在pos >= 0 才会执行
+            }
+            oldString = strRecv.left(pos + 1);    //完整帧数据处理
+            FrameProc(oldString);
+            strRecv = strRecv.right(strRecv.length() - pos - 1);   //存储剩余数据
+        }
+    }
+    else
+        oldString += strRecv;
+    ////////////////////////////////
 
     if(!buffer.isEmpty())
     {
@@ -188,10 +333,41 @@ void MainWindow::disconnectedSlot()
 void MainWindow::ServerReadData()
 {
     // 由于readyRead信号并未提供SocketDecriptor，所以需要遍历所有客户端
+    static QString oldString;
     static QString IP_Port, IP_Port_Pre;
     for(int i = 0; i < lstClient.length(); ++i)
     {
         QByteArray buffer = lstClient[i]->readAll();
+        ////////////////////////////////
+        /// 接收数据处理
+        ///
+        QString strRecv = QString(buffer);
+        int pos = strRecv.indexOf("\n");
+        if(pos >= 0)
+        {
+
+            oldString += strRecv.left(pos + 1);    //完整帧数据处理
+            FrameProc(oldString);                  //在页面各个文本框中显示接收的数据
+
+            strRecv = strRecv.right(strRecv.length() - pos - 1);   //存储剩余数据
+            while(true)
+            {
+                pos = strRecv.indexOf("\n");
+                if(pos < 0)        //已经处理完毕
+                {
+                    oldString = strRecv;
+                    break;         //如果处理完就跳出循环，下面的语句只有在pos >= 0 才会执行
+                }
+                oldString = strRecv.left(pos + 1);    //完整帧数据处理
+                FrameProc(oldString);
+                strRecv = strRecv.right(strRecv.length() - pos - 1);   //存储剩余数据
+            }
+        }
+        else
+            oldString += strRecv;
+        ////////////////////////////////
+
+
         if(buffer.isEmpty())
             continue;
 
@@ -392,4 +568,81 @@ void MainWindow::on_radioServer_clicked()
     ui->cbLstClients->clear();
     ui->cbLstClients->setVisible(true);
     ui->labelAddr->setText("本机地址：");
+}
+
+void MainWindow::on_btn_readpara_clicked()
+{
+    QString data = QString("QPARA\n");
+    QByteArray tba;
+    if (ui->chkHexSend->isChecked())
+        tba = HexStringToByteArray(data);
+    else
+        tba = data.toLatin1();
+    if (ui->radioClient->isChecked())
+    {
+        if(!data.isEmpty())
+        {
+            tcpClient->write(tba);
+        }
+    }
+    else {
+        //全部连接
+        if(ui->cbLstClients->currentIndex() == 0)
+        {
+            for(int i=0; i < lstClient.length(); i++)
+                lstClient[i]->write(tba);
+        }
+        else {
+            QString clientIP = ui->cbLstClients->currentText();
+            for(int i=0; i < lstClient.length(); i++)
+            {
+                if(lstClient[i]->peerAddress().toString() == clientIP)
+                {
+                    lstClient[i]->write(tba);
+                    return; //ip:port唯一，无需继续检索
+                }
+            }
+        }
+    }
+
+}
+
+void MainWindow::on_btn_setpara_clicked()
+{
+    QString data = QString("P1:%1, P2:%2, P3:%3, P4:%4\n").arg(
+                ui->spin_templmt->value()).arg(
+                ui->cmb_mpustep->currentIndex()).arg(
+                ui->spin_warntime->value()).arg(
+                (int)(ui->spin_upstep->value() * 1000));
+    QByteArray tba;
+    if (ui->chkHexSend->isChecked())
+        tba = HexStringToByteArray(data);
+    else
+        tba = data.toLatin1();
+    if (ui->radioClient->isChecked())
+    {
+        if(!data.isEmpty())
+        {
+            tcpClient->write(tba);
+        }
+    }
+    else {
+        //全部连接
+        if(ui->cbLstClients->currentIndex() == 0)
+        {
+            for(int i=0; i < lstClient.length(); i++)
+                lstClient[i]->write(tba);
+        }
+        else {
+            QString clientIP = ui->cbLstClients->currentText();
+            for(int i=0; i < lstClient.length(); i++)
+            {
+                if(lstClient[i]->peerAddress().toString() == clientIP)
+                {
+                    lstClient[i]->write(tba);
+                    return; //ip:port唯一，无需继续检索
+                }
+            }
+        }
+    }
 }

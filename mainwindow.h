@@ -21,6 +21,8 @@ public:
     void GetLocalIPAddress();
     QByteArray HexStringToByteArray(QString HexString);
 
+    void FrameProc(QString &str);
+
 private:
     Ui::MainWindow *ui;
     QTcpSocket *tcpClient;
@@ -41,6 +43,8 @@ private slots:
     void on_BtnSend_clicked();
     void on_radioClient_clicked();
     void on_radioServer_clicked();
+    void on_btn_readpara_clicked();
+    void on_btn_setpara_clicked();
 };
 
 #endif // MAINWINDOW_H
