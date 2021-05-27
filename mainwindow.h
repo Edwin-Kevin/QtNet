@@ -45,6 +45,8 @@ private slots:
     void on_radioServer_clicked();
     void on_btn_readpara_clicked();
     void on_btn_setpara_clicked();
+    void on_btn_openup_clicked();
+    void on_btn_stopup_clicked();
 };
 
 #endif // MAINWINDOW_H
